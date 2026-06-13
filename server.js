@@ -71,4 +71,13 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`API rodando na porta ${PORT}`);
+
+  // ── Keep-alive: evita que o Render hiberne no plano gratuito ──
+  setInterval(() => {
+    fetch('https://ohbarbeirobeckend.onrender.com/health')
+      .then(() => console.log('Keep-alive: servidor ativo'))
+      .catch(() => {});
+  }, 10 * 60 * 1000); // a cada 10 minutos
+});
