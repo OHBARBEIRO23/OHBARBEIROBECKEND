@@ -43,6 +43,7 @@ app.use('/api/login', rateLimit({
 
 // ── Rotas públicas ────────────────────────────────────────────
 app.use('/api', require('./routes/auth'));
+app.use('/api/public', require('./routes/public')); // agendamentos do site (sem login)
 
 // ── Rotas protegidas (todas exigem JWT válido) ─────────────────
 app.use('/api/agendamentos', auth, require('./routes/agendamentos'));
