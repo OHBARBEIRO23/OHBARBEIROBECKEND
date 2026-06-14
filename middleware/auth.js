@@ -1,6 +1,6 @@
-const jwt = require('jsonwebtoken');
+const admin = require('firebase-admin');
 
-module.exports = function authMiddleware(req, res, next) {
+module.exports = async function authMiddleware(req, res, next) {
   const header = req.headers['authorization'];
   if (!header || !header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Token ausente.' });
@@ -8,10 +8,11 @@ module.exports = function authMiddleware(req, res, next) {
 
   const token = header.split(' ')[1];
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.admin = payload;
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.admin = decoded;
     next();
   } catch (e) {
+    console.error('Erro verifyIdToken:', e.message); // LOG TEMPORÁRIO
     return res.status(401).json({ error: 'Token inválido ou expirado.' });
   }
 };
