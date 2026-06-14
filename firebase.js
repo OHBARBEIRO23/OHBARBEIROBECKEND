@@ -1,10 +1,14 @@
 const admin = require('firebase-admin');
 
 function getPrivateKey() {
+  let key;
   if (process.env.FIREBASE_PRIVATE_KEY_B64) {
-    return Buffer.from(process.env.FIREBASE_PRIVATE_KEY_B64, 'base64').toString('utf8');
+    key = Buffer.from(process.env.FIREBASE_PRIVATE_KEY_B64, 'base64').toString('utf8');
+  } else {
+    key = process.env.FIREBASE_PRIVATE_KEY;
   }
-  return process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  // Corrige \n literais (escapados) que vieram como texto "\\n"
+  return key?.replace(/\\n/g, '\n');
 }
 
 const app = admin.initializeApp({
