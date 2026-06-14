@@ -28,10 +28,14 @@ app.use(cors({
 app.use(express.json({ limit: '5mb' })); // limite pra uploads base64
 
 // ── Rate limit geral ──────────────────────────────────────────
+// O painel admin faz ~19 req por ciclo de sync (15s) = ~1140 req/15min por usuário.
+// Limite de 300 era muito baixo — aumentado pra 3000 para suportar o polling do painel.
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 300,
+  max: 3000,
   message: { error: 'Muitas requisições. Aguarde.' },
+  standardHeaders: true,
+  legacyHeaders: false,
 }));
 
 // ── Rotas públicas ────────────────────────────────────────────
