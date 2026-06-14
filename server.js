@@ -50,6 +50,7 @@ app.use('/api/produtos',     auth, require('./routes/generico')('produtos'));
 app.use('/api/barbeiros',    auth, require('./routes/generico')('barbeiros'));
 app.use('/api/receitas',     auth, require('./routes/generico')('receitas'));
 app.use('/api/despesas',     auth, require('./routes/generico')('despesas'));
+app.use('/api/assinaturas',  auth, require('./routes/generico')('assinaturas'));
 app.use('/api/config',       auth, require('./routes/config'));
 
 app.use('/api/bulk',         auth, require('./routes/bulk'));

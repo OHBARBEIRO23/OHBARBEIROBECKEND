@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const { dbSet } = require('../firebase');
 
-const LISTAS_PERMITIDAS = ['agendamentos','clientes','servicos','produtos','barbeiros','receitas','despesas'];
+const LISTAS_PERMITIDAS = ['agendamentos','clientes','servicos','produtos','barbeiros','receitas','despesas','assinaturas'];
 
 // PUT /api/bulk/:chave  — substitui a lista inteira
 router.put('/:chave', async (req, res) => {
