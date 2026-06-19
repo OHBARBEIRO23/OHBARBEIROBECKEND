@@ -1,4 +1,4 @@
-  require('dotenv').config();
+require('dotenv').config();
 const express    = require('express');
 const cors       = require('cors');
 const rateLimit  = require('express-rate-limit');
@@ -7,7 +7,6 @@ const auth       = require('./middleware/auth');
 const app = express();
 
 // ── CORS ──────────────────────────────────────────────────────
-// Permite o frontend do GitHub Pages + localhost pra desenvolvimento
 const origens = [
   process.env.FRONTEND_URL,
   'http://localhost:5500',
@@ -17,7 +16,6 @@ const origens = [
 
 app.use(cors({
   origin: (origin, cb) => {
-    // Permite requisições sem origin (Postman, curl) e origens autorizadas
     if (!origin || origens.includes(origin)) return cb(null, true);
     cb(new Error('CORS bloqueado: ' + origin));
   },
@@ -25,13 +23,11 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-app.use(express.json({ limit: '5mb' })); // limite pra uploads base64
+app.use(express.json({ limit: '5mb' }));
 
 // ── Rate limit geral ──────────────────────────────────────────
-// O painel admin faz ~19 req por ciclo de sync (15s) = ~1140 req/15min por usuário.
-// Limite de 300 era muito baixo — aumentado pra 3000 para suportar o polling do painel.
 app.use(rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
+  windowMs: 15 * 60 * 1000,
   max: 3000,
   message: { error: 'Muitas requisições. Aguarde.' },
   standardHeaders: true,
@@ -39,10 +35,9 @@ app.use(rateLimit({
 }));
 
 // ── Rotas públicas ────────────────────────────────────────────
-// Login agora é feito pelo Firebase Authentication direto no frontend.
-app.use('/api/public', require('./routes/public')); // agendamentos do site (sem login)
+app.use('/api/public', require('./routes/public'));
 
-// ── Rotas protegidas (todas exigem token Firebase válido) ───────
+// ── Rotas protegidas ─────────────────────────────────────────
 app.use('/api/agendamentos', auth, require('./routes/agendamentos'));
 app.use('/api/clientes',     auth, require('./routes/generico')('clientes'));
 app.use('/api/servicos',     auth, require('./routes/generico')('servicos'));
@@ -52,11 +47,20 @@ app.use('/api/receitas',     auth, require('./routes/generico')('receitas'));
 app.use('/api/despesas',     auth, require('./routes/generico')('despesas'));
 app.use('/api/assinaturas',  auth, require('./routes/generico')('assinaturas'));
 app.use('/api/config',       auth, require('./routes/config'));
-
 app.use('/api/bulk',         auth, require('./routes/bulk'));
-// Troca de senha agora é feita pelo Firebase (Console ou e-mail de reset).
 
-// ── Rota de saúde (pra checar se o servidor tá vivo) ──────────
+// ── Rota de teste manual da cobrança (REMOVER depois de testar) ─
+app.get('/api/test-cobranca', auth, async (req, res) => {
+  try {
+    const { checkAndSendCobrancas } = require('./routes/cobranca');
+    await checkAndSendCobrancas();
+    res.json({ ok: true, msg: 'Cobrança disparada — veja os logs do Render.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Rota de saúde ─────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // ── 404 ───────────────────────────────────────────────────────
@@ -68,5 +72,17 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Erro interno.' });
 });
 
+// ── Cobrança automática via WhatsApp (todo dia às 09h) ────────
+const cron = require('node-cron');
+const { checkAndSendCobrancas } = require('./routes/cobranca');
+
+cron.schedule('0 9 * * *', () => {
+  console.log('[cron] Iniciando cobrança automática...');
+  checkAndSendCobrancas().catch(console.error);
+}, { timezone: 'America/Sao_Paulo' });
+
+console.log('[cron] Agendamento de cobrança ativado — dispara todo dia às 09h');
+
+// ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
