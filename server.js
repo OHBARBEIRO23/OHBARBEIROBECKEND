@@ -60,6 +60,17 @@ app.get('/api/test-cobranca', auth, async (req, res) => {
   }
 });
 
+// ── Cobrança manual: avisar UM assinante específico via WhatsApp ─
+app.post('/api/cobranca/enviar/:assinaturaId', auth, async (req, res) => {
+  try {
+    const { enviarCobrancaManual } = require('./routes/cobranca');
+    const resultado = await enviarCobrancaManual(req.params.assinaturaId);
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ── Rota de saúde ─────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 

@@ -166,4 +166,46 @@ async function checkAndSendCobrancas() {
   console.log(`[cobranca] Concluído — ${enviados} enviados, ${erros} erros`);
 }
 
-module.exports = { checkAndSendCobrancas };
+// ─── ENVIO MANUAL PARA UM ASSINANTE ESPECÍFICO (botão no painel) ──────────────
+
+async function enviarCobrancaManual(assinaturaId) {
+  const configGeral = await dbGet('config') || {};
+  const pixChave = configGeral.pix || 'consulte a barbearia';
+
+  const assinaturas = await dbGet('assinaturas') || [];
+  const clientes    = await dbGet('clientes')    || [];
+
+  const ass = assinaturas.find(a => a.id === assinaturaId);
+  if (!ass) throw new Error('Assinatura não encontrada.');
+
+  const cliente = clientes.find(c => c.id === ass.clienteId);
+  if (!cliente) throw new Error('Cliente não encontrado.');
+
+  const telefone = cliente.telefone || cliente.whatsapp;
+  if (!telefone) throw new Error(`${cliente.nome} não tem telefone cadastrado.`);
+
+  const nome     = cliente.nome || 'Cliente';
+  const hoje     = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const dataVenc = new Date(ass.dataVencimento + 'T00:00:00');
+  dataVenc.setHours(0, 0, 0, 0);
+
+  const diffDias = Math.round((dataVenc - hoje) / (1000 * 60 * 60 * 24));
+  const dataFormatada = dataVenc.toLocaleDateString('pt-BR');
+  const valor = Number(ass.valor || 0).toFixed(2).replace('.', ',');
+
+  let mensagem;
+  if (diffDias > 0) {
+    mensagem = msgAviso(nome, diffDias, dataFormatada, valor, pixChave);
+  } else if (diffDias === 0) {
+    mensagem = msgVenceHoje(nome, dataFormatada, valor, pixChave);
+  } else {
+    mensagem = msgInadimplente(nome, -diffDias, valor, pixChave);
+  }
+
+  await enviarWhatsApp(telefone, mensagem);
+
+  return { cliente: nome, telefone, diffDias };
+}
+
+module.exports = { checkAndSendCobrancas, enviarCobrancaManual };
