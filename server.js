@@ -6,6 +6,12 @@ const auth       = require('./middleware/auth');
 
 const app = express();
 
+// ── Webhook do bot de WhatsApp ───────────────────────────────────
+// Registrado ANTES do CORS de propósito: quem chama essa rota é o
+// servidor da Z-API (não um navegador), então não faz sentido — e
+// quebraria o bot — aplicar a checagem de origem usada pro frontend.
+app.post('/api/whatsapp/webhook', express.json({ limit: '2mb' }), require('./routes/whatsappBot').handleWebhook);
+
 // ── CORS ──────────────────────────────────────────────────────
 const origens = [
   process.env.FRONTEND_URL,
@@ -72,9 +78,8 @@ app.post('/api/cobranca/enviar/:assinaturaId', auth, async (req, res) => {
 });
 
 // ── Bot de agendamento via WhatsApp ──────────────────────────────
-// Webhook: SEM auth, pois quem chama é a Z-API (não o painel admin)
+// (webhook já registrado no topo do arquivo, antes do CORS)
 const whatsappBot = require('./routes/whatsappBot');
-app.post('/api/whatsapp/webhook', whatsappBot.handleWebhook);
 
 // Pausar/retomar o bot para um cliente — chamado pelo botão no adm.html
 app.post('/api/whatsapp/pausar', auth, async (req, res) => {
