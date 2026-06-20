@@ -410,6 +410,25 @@ async function enviarResumoConfirmacao(telefone, sessao) {
   await enviarTexto(telefone, resumo);
 }
 
+// Busca um cliente pelo telefone; se não existir, cadastra automaticamente
+// (assim números novos que agendam pelo bot já entram no sistema)
+async function buscarOuCriarCliente(telefone, nome) {
+  const clientes = await dbGet('clientes') || [];
+  const existente = clientes.find(c => telefonesIguais(c.telefone, telefone));
+  if (existente) return existente;
+
+  const novoCliente = {
+    id: 'cl' + Date.now() + Math.random().toString(36).slice(2, 6),
+    nome,
+    telefone,
+    criado: hojeISO(),
+    origem: 'whatsapp_bot',
+  };
+  clientes.push(novoCliente);
+  await dbSet('clientes', clientes);
+  return novoCliente;
+}
+
 async function tratarMarcarConfirmar(telefone, texto, sessao) {
   const escolha = texto.trim();
 
@@ -432,12 +451,15 @@ async function tratarMarcarConfirmar(telefone, texto, sessao) {
     return;
   }
 
+  // Garante que o telefone vira (ou já é) um cliente cadastrado no sistema
+  const cliente = await buscarOuCriarCliente(telefone, sessao.clienteNome);
+
   const agendamentos = await dbGet('agendamentos') || [];
   const novo = {
     id: 'ag' + Date.now(),
     clienteNome: sessao.clienteNome,
     nomeCliente: sessao.clienteNome,
-    clienteId: '',
+    clienteId: cliente.id,
     telefone: telefone,
     servicos: sessao.servicosEscolhidos,
     svcNomes: sessao.servicosNomes,
