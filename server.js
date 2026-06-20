@@ -71,6 +71,33 @@ app.post('/api/cobranca/enviar/:assinaturaId', auth, async (req, res) => {
   }
 });
 
+// ── Bot de agendamento via WhatsApp ──────────────────────────────
+// Webhook: SEM auth, pois quem chama é a Z-API (não o painel admin)
+const whatsappBot = require('./routes/whatsappBot');
+app.post('/api/whatsapp/webhook', whatsappBot.handleWebhook);
+
+// Pausar/retomar o bot para um cliente — chamado pelo botão no adm.html
+app.post('/api/whatsapp/pausar', auth, async (req, res) => {
+  try {
+    const { telefone, motivo } = req.body;
+    if (!telefone) return res.status(400).json({ error: 'telefone é obrigatório.' });
+    await whatsappBot.pausarBot(telefone, motivo || 'painel_admin');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post('/api/whatsapp/retomar', auth, async (req, res) => {
+  try {
+    const { telefone } = req.body;
+    if (!telefone) return res.status(400).json({ error: 'telefone é obrigatório.' });
+    await whatsappBot.retomarBot(telefone);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Rota de saúde ─────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
