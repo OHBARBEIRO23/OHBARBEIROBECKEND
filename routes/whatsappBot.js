@@ -152,6 +152,20 @@ async function horariosLivres(dataISO, barbeiroId) {
   return todos.filter(t => !ocupados.includes(t));
 }
 
+// Agendamentos futuros (data >= hoje, status != cancelado) de um telefone, ordenados por data/hora
+async function agendamentosFuturos(telefone) {
+  const agendamentos = await dbGet('agendamentos') || [];
+  const hoje = hojeISO();
+  return agendamentos
+    .filter(a => telefonesIguais(a.telefone, telefone) && a.status !== 'cancelado' && a.data >= hoje)
+    .sort((a, b) => (a.data + (a.horario || a.hora || '')).localeCompare(b.data + (b.horario || b.hora || '')));
+}
+
+function fmtAgendamentoLinha(a, i) {
+  const svc = (a.svcNomes || []).join(', ') || 'Serviço';
+  return `*${i + 1}* - ${fmtDataCurta(a.data)} às ${a.horario || a.hora} — ${svc} (${a.barbeiro || 'barbeiro'})`;
+}
+
 // ─── MENU PRINCIPAL ──────────────────────────────────────────────────────────────
 const MENU_PRINCIPAL =
   `Olá! 👋 Bem-vindo à *Oh Barbeiro*.\n\n` +
@@ -208,6 +222,12 @@ async function processarMensagem(telefone, textoRecebido) {
     case 'marcar_confirmar':
       await tratarMarcarConfirmar(telefone, texto, sessao);
       break;
+    case 'cancelar_escolher':
+      await tratarCancelarEscolher(telefone, texto, sessao);
+      break;
+    case 'cancelar_confirmar':
+      await tratarCancelarConfirmar(telefone, texto, sessao);
+      break;
 
     case 'menu':
     default:
@@ -222,12 +242,10 @@ async function tratarMenuPrincipal(telefone, texto) {
       await iniciarMarcacao(telefone);
       break;
     case '2':
-      // Próxima etapa: lista agendamentos futuros do cliente
-      await enviarTexto(telefone, '📋 Ver agendamentos — em breve! Essa parte ainda está sendo construída.');
+      await listarAgendamentosCliente(telefone);
       break;
     case '3':
-      // Próxima etapa: lista agendamentos para cancelar
-      await enviarTexto(telefone, '❌ Cancelar agendamento — em breve! Essa parte ainda está sendo construída.');
+      await iniciarCancelamento(telefone);
       break;
     case '4':
       await pausarBot(telefone, 'cliente_pediu_atendente');
@@ -443,6 +461,105 @@ async function tratarMarcarConfirmar(telefone, texto, sessao) {
     `Com ${sessao.barbeiroNome}\n\n` +
     `Te esperamos! ✂️💈`
   );
+}
+
+// ═══════════════════════════════════════════════════════════
+// FLUXO: VER MEUS AGENDAMENTOS
+// ═══════════════════════════════════════════════════════════
+
+async function listarAgendamentosCliente(telefone) {
+  const futuros = await agendamentosFuturos(telefone);
+
+  if (futuros.length === 0) {
+    await enviarTexto(telefone, 'Você não tem nenhum agendamento futuro. Digite *1* para marcar um horário.');
+    return;
+  }
+
+  const lista = futuros.map((a, i) => fmtAgendamentoLinha(a, i)).join('\n');
+  await enviarTexto(telefone, `📋 *Seus próximos agendamentos:*\n\n${lista}\n\nDigite *0* para voltar ao menu.`);
+}
+
+// ═══════════════════════════════════════════════════════════
+// FLUXO: CANCELAR AGENDAMENTO
+// ═══════════════════════════════════════════════════════════
+
+async function iniciarCancelamento(telefone) {
+  const futuros = await agendamentosFuturos(telefone);
+
+  if (futuros.length === 0) {
+    await enviarTexto(telefone, 'Você não tem nenhum agendamento futuro para cancelar.');
+    return;
+  }
+
+  const lista = futuros.map((a, i) => fmtAgendamentoLinha(a, i)).join('\n');
+
+  await setSessao(telefone, {
+    step: 'cancelar_escolher',
+    agendamentosIds: futuros.map(a => a.id),
+  });
+  await enviarTexto(telefone, `❌ Qual agendamento você quer cancelar?\n\n${lista}\n\nDigite o número, ou *0* para voltar ao menu.`);
+}
+
+async function tratarCancelarEscolher(telefone, texto, sessao) {
+  if (texto.trim() === '0') {
+    await limparSessao(telefone);
+    await enviarTexto(telefone, MENU_PRINCIPAL);
+    return;
+  }
+
+  const idx = parseInt(texto.trim());
+  const agendamentoId = (sessao.agendamentosIds || [])[idx - 1];
+
+  if (!agendamentoId) {
+    await enviarTexto(telefone, 'Não entendi. Digite o número do agendamento da lista, ou *0* para voltar.');
+    return;
+  }
+
+  const agendamentos = await dbGet('agendamentos') || [];
+  const ag = agendamentos.find(a => a.id === agendamentoId);
+
+  if (!ag) {
+    await limparSessao(telefone);
+    await enviarTexto(telefone, 'Esse agendamento não foi encontrado (pode já ter sido alterado). Digite *3* para tentar de novo.');
+    return;
+  }
+
+  await setSessao(telefone, { step: 'cancelar_confirmar', agendamentoId });
+  await enviarTexto(
+    telefone,
+    `Confirma o cancelamento de:\n\n${fmtDataCurta(ag.data)} às ${ag.horario || ag.hora} — ${(ag.svcNomes || []).join(', ')}\n\n` +
+    `*1* - Sim, cancelar\n*2* - Não, manter`
+  );
+}
+
+async function tratarCancelarConfirmar(telefone, texto, sessao) {
+  const escolha = texto.trim();
+
+  if (escolha === '2') {
+    await limparSessao(telefone);
+    await enviarTexto(telefone, 'Tudo certo, seu agendamento foi mantido. 👍');
+    return;
+  }
+
+  if (escolha !== '1') {
+    await enviarTexto(telefone, 'Digite *1* para confirmar o cancelamento ou *2* para manter.');
+    return;
+  }
+
+  const agendamentos = await dbGet('agendamentos') || [];
+  const idx = agendamentos.findIndex(a => a.id === sessao.agendamentoId);
+
+  if (idx < 0) {
+    await limparSessao(telefone);
+    await enviarTexto(telefone, 'Esse agendamento não foi encontrado (pode já ter sido alterado).');
+    return;
+  }
+
+  agendamentos[idx].status = 'cancelado';
+  await dbSet('agendamentos', agendamentos);
+
+  await limparSessao(telefone);
+  await enviarTexto(telefone, '✅ Agendamento cancelado. Se quiser marcar outro horário, digite *1*.');
 }
 
 // ─── WEBHOOK (chamado pela Z-API a cada mensagem recebida) ──────────────────────
