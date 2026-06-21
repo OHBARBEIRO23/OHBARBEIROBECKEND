@@ -34,18 +34,26 @@ async function enviarTexto(telefone, mensagem) {
 }
 
 // ─── NORMALIZAÇÃO DE TELEFONE ───────────────────────────────────────────────────
-// Comparamos pelos últimos 8 dígitos (o número "puro", sem DDD/DDI/9º dígito extra)
-// porque cliente pode digitar o telefone de formatos bem diferentes no site:
-// "83996529337", "(83) 99652-9337", "8396529337" (sem o 9 extra), etc.
-function ultimosDigitos(telefone, n = 8) {
-  const digitos = (telefone || '').replace(/\D/g, '');
-  return digitos.slice(-n);
+// Cliente pode ter o telefone salvo de formas bem diferentes:
+// "83996529337", "(83) 99652-9337", "9652-9337", "99652-9337", com ou sem DDD,
+// com ou sem o 9º dígito extra, com ou sem código do país. Como o DDD às vezes
+// nem é digitado, não dá pra confiar nele pra comparar — por isso comparamos
+// somente os ÚLTIMOS 8 DÍGITOS do número (que é a parte sempre presente e
+// estável em qualquer formato: ignora DDI, DDD e o 9º dígito extra de celular).
+function normalizarTelefone(telefone) {
+  const d = (telefone || '').replace(/\D/g, '');
+  return d.slice(-8);
+}
+
+// Mantido por compatibilidade com o restante do código
+function ultimosDigitos(telefone) {
+  return normalizarTelefone(telefone);
 }
 
 function telefonesIguais(a, b) {
-  const da = ultimosDigitos(a);
-  const db = ultimosDigitos(b);
-  if (!da || !db) return false;
+  const da = normalizarTelefone(a);
+  const db = normalizarTelefone(b);
+  if (!da || !db || da.length < 8 || db.length < 8) return false;
   return da === db;
 }
 
@@ -224,6 +232,19 @@ async function iniciarConversa(telefone) {
   const cliente = await buscarCliente(telefone);
   const nome = cliente?.nome ? cliente.nome.split(' ')[0] : null;
   const futuros = await agendamentosFuturos(telefone);
+
+  // LOG TEMPORÁRIO DE DIAGNÓSTICO — remover depois de confirmar a causa
+  const todosAgendamentos = await dbGet('agendamentos') || [];
+  console.log('[DEBUG-BOT] telefone recebido do webhook:', telefone, '→ normalizado:', ultimosDigitos(telefone));
+  console.log('[DEBUG-BOT] cliente encontrado:', cliente ? `${cliente.nome} / tel: ${cliente.telefone}` : 'nenhum');
+  console.log('[DEBUG-BOT] qtd agendamentos futuros encontrados:', futuros.length);
+  console.log('[DEBUG-BOT] últimos 5 agendamentos no banco:', todosAgendamentos.slice(-5).map(a => ({
+    telefone: a.telefone,
+    normalizado: ultimosDigitos(a.telefone),
+    data: a.data,
+    status: a.status,
+    hoje_maior_igual: a.data >= hojeISO(),
+  })));
 
   if (futuros.length > 0) {
     const ag = futuros[0];
