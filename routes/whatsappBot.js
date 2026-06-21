@@ -225,13 +225,6 @@ async function iniciarConversa(telefone) {
   const nome = cliente?.nome ? cliente.nome.split(' ')[0] : null;
   const futuros = await agendamentosFuturos(telefone);
 
-  // LOG TEMPORÁRIO DE DIAGNÓSTICO — remover depois de confirmar que está funcionando
-  const todosAgendamentos = await dbGet('agendamentos') || [];
-  console.log('[whatsappBot][DEBUG] telefone recebido do webhook:', telefone, '→ normalizado:', ultimosDigitos(telefone));
-  console.log('[whatsappBot][DEBUG] cliente encontrado:', cliente ? cliente.nome + ' / tel salvo: ' + cliente.telefone : 'nenhum');
-  console.log('[whatsappBot][DEBUG] agendamentos futuros encontrados:', futuros.length);
-  console.log('[whatsappBot][DEBUG] todos os agendamentos no banco:', todosAgendamentos.map(a => ({ telefone: a.telefone, normalizado: ultimosDigitos(a.telefone), data: a.data, status: a.status })));
-
   if (futuros.length > 0) {
     const ag = futuros[0];
     await setSessao(telefone, { step: 'pos_comanda', agendamentoId: ag.id });
@@ -445,6 +438,24 @@ async function tratarCancelarConfirmar(telefone, texto, sessao) {
   await enviarTexto(telefone, `✅ Agendamento cancelado. Se quiser marcar outro horário, acesse:\n🔗 ${LINK_SITE}`);
 }
 
+// Envia a mensagem de confirmação quando o cliente marca pelo site
+async function enviarConfirmacaoAgendamento(booking) {
+  if (!booking.telefone) return; // sem telefone, não há pra quem mandar
+
+  const svc = (booking.svcNomes || []).join(', ') || 'Serviço';
+  const valor = booking.total != null ? Number(booking.total).toFixed(2).replace('.', ',') : null;
+
+  const mensagem =
+    `✅ *Agendamento confirmado!*\n\n` +
+    `${svc}\n` +
+    `${fmtDataCurta(booking.data)} às ${booking.hora || booking.horario}\n` +
+    `Com ${booking.barbeiro || 'nosso barbeiro'}` +
+    (valor ? `\nValor: R$ ${valor}` : '') +
+    `\n\nTe esperamos! ✂️💈`;
+
+  await enviarTexto(booking.telefone, mensagem);
+}
+
 // ─── WEBHOOK (chamado pela Z-API a cada mensagem recebida) ──────────────────────
 async function handleWebhook(req, res) {
   try {
@@ -470,4 +481,5 @@ module.exports = {
   retomarBot,
   isPausado,
   telefonesIguais,
+  enviarConfirmacaoAgendamento,
 };

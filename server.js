@@ -86,6 +86,22 @@ app.post('/api/cobranca/enviar/:assinaturaId', auth, async (req, res) => {
 // (webhook já registrado no topo do arquivo, antes do CORS)
 const whatsappBot = require('./routes/whatsappBot');
 
+// Confirmação automática de agendamento via WhatsApp — chamada tanto
+// pelo site público (index.html) quanto pelo painel admin (adm.html)
+// depois de salvar um agendamento novo. SEM auth: o site público
+// (index.html) não tem token de login, então precisa ficar aberta
+// como /api/public; quem chama do adm.html também funciona normal.
+app.post('/api/whatsapp/confirmar-agendamento', async (req, res) => {
+  try {
+    await whatsappBot.enviarConfirmacaoAgendamento(req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    // Não derruba o fluxo de agendamento por causa disso — só loga o erro
+    console.error('[whatsapp/confirmar-agendamento] erro:', err.message);
+    res.status(200).json({ ok: false, error: err.message });
+  }
+});
+
 // Pausar/retomar o bot para um cliente — chamado pelo botão no adm.html
 app.post('/api/whatsapp/pausar', auth, async (req, res) => {
   try {
