@@ -459,6 +459,26 @@ async function tratarCancelarConfirmar(telefone, texto, sessao) {
   await enviarTexto(telefone, `✅ Agendamento cancelado. Se quiser marcar outro horário, acesse:\n🔗 ${LINK_SITE}`);
 }
 
+// Envia a mensagem de confirmação quando um agendamento novo é criado
+// (pelo site público ou pelo painel admin)
+async function enviarConfirmacaoAgendamento(booking) {
+  // Validação básica — sem telefone ou data, não há o que confirmar
+  if (!booking || !booking.telefone || !booking.data || !(booking.hora || booking.horario)) return;
+
+  const svc = (booking.svcNomes || []).join(', ') || 'Serviço';
+  const valor = booking.total != null ? Number(booking.total).toFixed(2).replace('.', ',') : null;
+
+  const mensagem =
+    `✅ *Agendamento confirmado!*\n\n` +
+    `${svc}\n` +
+    `${fmtDataCurta(booking.data)} às ${booking.hora || booking.horario}\n` +
+    `Com ${booking.barbeiro || 'nosso barbeiro'}` +
+    (valor ? `\nValor: R$ ${valor}` : '') +
+    `\n\nTe esperamos! ✂️💈`;
+
+  await enviarTexto(booking.telefone, mensagem);
+}
+
 // ─── WEBHOOK (chamado pela Z-API a cada mensagem recebida) ──────────────────────
 async function handleWebhook(req, res) {
   try {
@@ -484,4 +504,5 @@ module.exports = {
   retomarBot,
   isPausado,
   telefonesIguais,
+  enviarConfirmacaoAgendamento,
 };

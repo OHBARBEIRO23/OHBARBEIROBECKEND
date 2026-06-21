@@ -86,6 +86,31 @@ app.post('/api/cobranca/enviar/:assinaturaId', auth, async (req, res) => {
 // (webhook já registrado no topo do arquivo, antes do CORS)
 const whatsappBot = require('./routes/whatsappBot');
 
+// Confirmação automática de agendamento via WhatsApp — chamada tanto
+// pelo site público (index.html) quanto pelo painel admin (adm.html)
+// depois de salvar um agendamento novo. SEM auth: o site público
+// não tem token de login. Rate limit mais apertado evita abuso.
+const limitConfirmacao = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Muitas tentativas. Aguarde alguns minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.post('/api/whatsapp/confirmar-agendamento', limitConfirmacao, async (req, res) => {
+  // Responde sucesso pro chamador IMEDIATAMENTE — o envio do WhatsApp
+  // roda depois, sem fazer o site ou o painel esperar nem poder falhar
+  // por causa disso. Isso garante que essa rota NUNCA pode causar
+  // "erro ao salvar" para o cliente, não importa o que aconteça aqui.
+  res.json({ ok: true });
+  try {
+    await whatsappBot.enviarConfirmacaoAgendamento(req.body || {});
+  } catch (err) {
+    console.error('[whatsapp/confirmar-agendamento] erro:', err.message);
+  }
+});
+
 // Pausar/retomar o bot para um cliente — chamado pelo botão no adm.html
 app.post('/api/whatsapp/pausar', auth, async (req, res) => {
   try {
