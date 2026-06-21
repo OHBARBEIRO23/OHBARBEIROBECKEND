@@ -25,8 +25,11 @@ const origens = [
   'http://localhost:3001',
 ].filter(Boolean);
 
+console.log('[CORS-DEBUG] Origens permitidas no boot:', JSON.stringify(origens));
+
 app.use(cors({
   origin: (origin, cb) => {
+    console.log('[CORS-DEBUG] Origem recebida:', JSON.stringify(origin), '| está na lista?', origens.includes(origin));
     if (!origin || origens.includes(origin)) return cb(null, true);
     cb(new Error('CORS bloqueado: ' + origin));
   },
