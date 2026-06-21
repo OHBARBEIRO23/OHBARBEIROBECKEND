@@ -159,9 +159,23 @@ async function horariosLivres(dataISO, barbeiroId) {
 
 async function agendamentosFuturos(telefone) {
   const agendamentos = await dbGet('agendamentos') || [];
+  const clientes = await dbGet('clientes') || [];
   const hoje = hojeISO();
+
   return agendamentos
-    .filter(a => telefonesIguais(a.telefone, telefone) && a.status !== 'cancelado' && a.data >= hoje)
+    .filter(a => {
+      if (a.status === 'cancelado') return false;
+      if (a.data < hoje) return false;
+      // Tenta pelo telefone direto no agendamento
+      if (a.telefone && telefonesIguais(a.telefone, telefone)) return true;
+      // Se não tem telefone no agendamento, busca pelo clienteId
+      if (a.clienteId) {
+        const cliente = clientes.find(c => c.id === a.clienteId);
+        if (cliente && telefonesIguais(cliente.telefone, telefone)) return true;
+      }
+      // Tenta também pelo nome do cliente como fallback via clienteNome
+      return false;
+    })
     .sort((a, b) => (a.data + (a.horario || a.hora || '')).localeCompare(b.data + (b.horario || b.hora || '')));
 }
 
@@ -255,7 +269,8 @@ async function iniciarConversa(telefone) {
       `📋 *Sua comanda:*\n${fmtComanda(ag)}\n\n` +
       `*1* - Remarcar\n` +
       `*2* - Cancelar\n` +
-      `*3* - Está tudo certo, era só isso`
+      `*3* - Falar com o barbeiro\n` +
+      `*4* - Está tudo certo, era só isso`
     );
     return;
   }
@@ -331,12 +346,19 @@ async function tratarPosComanda(telefone, texto, sessao) {
   }
 
   if (escolha === '3') {
+    await pausarBot(telefone, 'cliente_pediu_barbeiro');
+    await limparSessao(telefone);
+    await enviarTexto(telefone, '👤 Combinado! O barbeiro vai te responder em breve. Se quiser voltar a falar com o bot, é só mandar */retomar*.');
+    return;
+  }
+
+  if (escolha === '4') {
     await limparSessao(telefone);
     await enviarTexto(telefone, 'Combinado! Até lá 😊');
     return;
   }
 
-  await enviarTexto(telefone, 'Não entendi. Digite *1* (Remarcar), *2* (Cancelar) ou *3* (Está tudo certo).');
+  await enviarTexto(telefone, 'Não entendi. Digite *1* (Remarcar), *2* (Cancelar), *3* (Falar com o barbeiro) ou *4* (Está tudo certo).');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -462,8 +484,17 @@ async function tratarCancelarConfirmar(telefone, texto, sessao) {
 // Envia a mensagem de confirmação quando um agendamento novo é criado
 // (pelo site público ou pelo painel admin)
 async function enviarConfirmacaoAgendamento(booking) {
-  // Validação básica — sem telefone ou data, não há o que confirmar
-  if (!booking || !booking.telefone || !booking.data || !(booking.hora || booking.horario)) return;
+  if (!booking || !booking.data || !(booking.hora || booking.horario)) return;
+
+  // Busca o telefone: primeiro no próprio booking, depois no cadastro do cliente
+  let telefone = booking.telefone;
+  if (!telefone && booking.clienteId) {
+    const clientes = await dbGet('clientes') || [];
+    const cliente = clientes.find(c => c.id === booking.clienteId);
+    telefone = cliente?.telefone;
+  }
+
+  if (!telefone) return;
 
   const svc = (booking.svcNomes || []).join(', ') || 'Serviço';
   const valor = booking.total != null ? Number(booking.total).toFixed(2).replace('.', ',') : null;
@@ -474,9 +505,9 @@ async function enviarConfirmacaoAgendamento(booking) {
     `${fmtDataCurta(booking.data)} às ${booking.hora || booking.horario}\n` +
     `Com ${booking.barbeiro || 'nosso barbeiro'}` +
     (valor ? `\nValor: R$ ${valor}` : '') +
-    `\n\nTe esperamos! ✂️💈`;
+    `\n\nNão falte! Qualquer dúvida entre em contato. ✂️💈`;
 
-  await enviarTexto(booking.telefone, mensagem);
+  await enviarTexto(telefone, mensagem);
 }
 
 // ─── WEBHOOK (chamado pela Z-API a cada mensagem recebida) ──────────────────────
