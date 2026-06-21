@@ -34,14 +34,19 @@ async function enviarTexto(telefone, mensagem) {
 }
 
 // ─── NORMALIZAÇÃO DE TELEFONE ───────────────────────────────────────────────────
-function ultimosDigitos(telefone, n = 9) {
+// Comparamos pelos últimos 8 dígitos (o número "puro", sem DDD/DDI/9º dígito extra)
+// porque cliente pode digitar o telefone de formatos bem diferentes no site:
+// "83996529337", "(83) 99652-9337", "8396529337" (sem o 9 extra), etc.
+function ultimosDigitos(telefone, n = 8) {
   const digitos = (telefone || '').replace(/\D/g, '');
   return digitos.slice(-n);
 }
 
 function telefonesIguais(a, b) {
-  if (!a || !b) return false;
-  return ultimosDigitos(a) === ultimosDigitos(b);
+  const da = ultimosDigitos(a);
+  const db = ultimosDigitos(b);
+  if (!da || !db) return false;
+  return da === db;
 }
 
 // ─── SESSÕES DE CONVERSA (estado por telefone) ──────────────────────────────────
@@ -219,6 +224,13 @@ async function iniciarConversa(telefone) {
   const cliente = await buscarCliente(telefone);
   const nome = cliente?.nome ? cliente.nome.split(' ')[0] : null;
   const futuros = await agendamentosFuturos(telefone);
+
+  // LOG TEMPORÁRIO DE DIAGNÓSTICO — remover depois de confirmar que está funcionando
+  const todosAgendamentos = await dbGet('agendamentos') || [];
+  console.log('[whatsappBot][DEBUG] telefone recebido do webhook:', telefone, '→ normalizado:', ultimosDigitos(telefone));
+  console.log('[whatsappBot][DEBUG] cliente encontrado:', cliente ? cliente.nome + ' / tel salvo: ' + cliente.telefone : 'nenhum');
+  console.log('[whatsappBot][DEBUG] agendamentos futuros encontrados:', futuros.length);
+  console.log('[whatsappBot][DEBUG] todos os agendamentos no banco:', todosAgendamentos.map(a => ({ telefone: a.telefone, normalizado: ultimosDigitos(a.telefone), data: a.data, status: a.status })));
 
   if (futuros.length > 0) {
     const ag = futuros[0];
