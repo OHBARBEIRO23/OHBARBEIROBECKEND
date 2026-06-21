@@ -6,6 +6,11 @@ const auth       = require('./middleware/auth');
 
 const app = express();
 
+// Necessário no Render (e em qualquer host atrás de proxy reverso):
+// sem isso, o express-rate-limit não consegue ler o IP real do
+// cabeçalho X-Forwarded-For e derruba a requisição com erro.
+app.set('trust proxy', 1);
+
 // ── Webhook do bot de WhatsApp ───────────────────────────────────
 // Registrado ANTES do CORS de propósito: quem chama essa rota é o
 // servidor da Z-API (não um navegador), então não faz sentido — e
