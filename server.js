@@ -139,6 +139,9 @@ app.post('/api/whatsapp/retomar', auth, async (req, res) => {
 // ── Rota de saúde ─────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
+// ── Keep-alive — mantém o Render acordado no plano gratuito ──
+app.get('/api/ping', (req, res) => res.json({ ok: true, ts: Date.now() }));
+
 // ── 404 ───────────────────────────────────────────────────────
 app.use((req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));
 
